@@ -2,11 +2,63 @@
   "name": "logic-gate-visualizer",
   "version": "1.0.0",
   "main": "src/main.js",
+  "description": "A visualiser for logic gate boolean expressions.",
+  "author": {
+    "name": "iskidcodes"
+  },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.logicgate.visualizer",
+    "productName": "Boolean Logic Gate Visualizer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png"
+    }
   },
   "dependencies": {
-    "boolean-parser": "^0.0.2",
+    "boolean-parser": "^0.0.2"
+  },
+  "devDependencies": {
+    "electron-builder": "^26.0.12",
     "electron": "^38.1.0"
   }
 }
