@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
+    />
+
     <title>Boolean Logic Gate Visualizer</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -14,5 +18,8 @@
     <button id="renderBtn">Render Diagram</button>
     <div id="diagram"></div>
     <script src="app.js"></script>
+    <script>
+      document.getElementById("expr").style.resize = "none";
+    </script>
   </body>
 </html>
