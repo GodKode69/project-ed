@@ -6,13 +6,16 @@ const renderBtn = document.getElementById("renderBtn");
 let errorMsg = document.createElement("div");
 errorMsg.style.color = "red";
 errorMsg.style.marginTop = "6px";
+errorMsg.style.display = "none"; // Hide by default
 exprInput.parentNode.insertBefore(errorMsg, exprInput.nextSibling);
 
 function setError(message) {
   errorMsg.textContent = message;
+  errorMsg.style.display = "block"; // Show when error occurs
 }
 function clearError() {
-  setError("");
+  errorMsg.textContent = "";
+  errorMsg.style.display = "none"; // Hide when cleared
 }
 
 // Tokenizer for supported tokens
@@ -202,11 +205,44 @@ function drawXorGate(svg, x, y) {
   svg.appendChild(path);
   return drawOrGate(svg, x, y);
 }
+
+// Wire routing with comprehensive overlap prevention
+let globalWireLane = 0;
+let horizontalYLevels = {}; // Track wires by their horizontal Y coordinate
+
 function drawWire(svg, from, to) {
   const wire = document.createElementNS(svg.namespaceURI, "path");
-  const d = `M${from[0]} ${from[1]} H${(from[0] + to[0]) / 2} V${to[1]} H${
-    to[0]
-  }`;
+
+  // Assign unique vertical lane (horizontal spacing for initial segment)
+  const VERTICAL_LANE_SPACING = 25;
+  const verticalLane = globalWireLane++;
+  const midX = from[0] + 40 + verticalLane * VERTICAL_LANE_SPACING;
+
+  // Prevent overshooting
+  const safeMidX = Math.min(midX, to[0] - 20);
+
+  // Track horizontal segments by Y level to prevent overlap
+  const targetY = to[1];
+  const yKey = Math.round(targetY * 10) / 10; // Round to handle floating point precision
+
+  if (!horizontalYLevels[yKey]) {
+    horizontalYLevels[yKey] = 0;
+  }
+
+  const horizontalLane = horizontalYLevels[yKey]++;
+  const HORIZONTAL_LANE_SPACING = 12; // Vertical offset for horizontal segments
+  const adjustedY = targetY + horizontalLane * HORIZONTAL_LANE_SPACING;
+
+  // Create the wire path
+  let d;
+  if (horizontalLane === 0) {
+    // First wire at this Y level - direct path
+    d = `M${from[0]} ${from[1]} H${safeMidX} V${targetY} H${to[0]}`;
+  } else {
+    // Subsequent wires - use adjusted Y then connect to target
+    d = `M${from[0]} ${from[1]} H${safeMidX} V${adjustedY} H${to[0]} V${targetY}`;
+  }
+
   wire.setAttribute("d", d);
   wire.setAttribute("class", "wire");
   svg.appendChild(wire);
@@ -233,38 +269,6 @@ function drawInput(svg, x, y, label) {
   return { out: [x + 18, y] };
 }
 
-// Render node recursively
-function renderNode(svg, node, x, y, dy = 70) {
-  if (!node) return null;
-  if (node.type === "literal") {
-    return drawInput(svg, x, y, node.name);
-  }
-  const gateFns = {
-    AND: drawAndGate,
-    OR: drawOrGate,
-    NOT: drawNotGate,
-    NAND: drawNandGate,
-    NOR: drawNorGate,
-    XOR: drawXorGate,
-  };
-  const fn = gateFns[node.name];
-  if (node.args.length === 1) {
-    const in1 = renderNode(svg, node.args[0], x - 120, y, dy);
-    const out = fn(svg, x, y - 20);
-    drawWire(svg, in1.out, out.in1);
-    return { out: out.out };
-  }
-  if (node.args.length === 2) {
-    const in1 = renderNode(svg, node.args[0], x - 120, y - dy / 2, dy / 2);
-    const in2 = renderNode(svg, node.args[1], x - 120, y + dy / 2, dy / 2);
-    const out = fn(svg, x, y - 20);
-    drawWire(svg, in1.out, out.in1);
-    drawWire(svg, in2.out, out.in2);
-    return { out: out.out };
-  }
-  return null;
-}
-
 function clearDiagram() {
   diagram.innerHTML = "";
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -277,6 +281,10 @@ function clearDiagram() {
 renderBtn.onclick = () => {
   clearError();
   clearDiagram();
+
+  // CRITICAL: Reset both tracking systems
+  globalWireLane = 0;
+  horizontalYLevels = {};
 
   const expr = exprInput.value.trim();
   if (!expr) {
@@ -295,11 +303,59 @@ renderBtn.onclick = () => {
   }
 
   const svg = document.querySelector("#diagram svg") || clearDiagram();
+
+  // 1. Find all unique input literals from AST
+  function findInputs(node, inputs = new Set()) {
+    if (!node) return;
+    if (node.type === "literal") inputs.add(node.name);
+    if (node.type === "operator")
+      node.args.forEach((arg) => findInputs(arg, inputs));
+    return inputs;
+  }
+  const inputsArray = Array.from(findInputs(tree)).sort();
+  const inputCoords = {};
+  inputsArray.forEach((lit, idx) => {
+    inputCoords[lit] = { x: 120, y: 140 + idx * 60 };
+    drawInput(svg, inputCoords[lit].x, inputCoords[lit].y, lit);
+  });
+
+  // 2. Modified renderer: use precomputed input positions
+  function renderNode(svg, node, x, y, dy = 70) {
+    if (!node) return null;
+    if (node.type === "literal") {
+      const coords = inputCoords[node.name];
+      return { out: [coords.x + 18, coords.y] };
+    }
+    const gateFns = {
+      AND: drawAndGate,
+      OR: drawOrGate,
+      NOT: drawNotGate,
+      NAND: drawNandGate,
+      NOR: drawNorGate,
+      XOR: drawXorGate,
+    };
+    const fn = gateFns[node.name];
+    if (node.args.length === 1) {
+      const in1 = renderNode(svg, node.args[0], x - 120, y, dy);
+      const out = fn(svg, x, y - 20);
+      drawWire(svg, in1.out, out.in1);
+      return { out: out.out };
+    }
+    if (node.args.length === 2) {
+      const in1 = renderNode(svg, node.args[0], x - 120, y - dy / 2, dy / 2);
+      const in2 = renderNode(svg, node.args[1], x - 120, y + dy / 2, dy / 2);
+      const out = fn(svg, x, y - 20);
+      drawWire(svg, in1.out, out.in1);
+      drawWire(svg, in2.out, out.in2);
+      return { out: out.out };
+    }
+    return null;
+  }
+
   const output = renderNode(svg, tree, 830, 320, 100);
 
   if (output && output.out) drawWire(svg, output.out, [1030, output.out[1]]);
 
-  // Output label
   const text = document.createElementNS(svg.namespaceURI, "text");
   text.setAttribute("x", 1040);
   text.setAttribute("y", output.out[1] + 6);
@@ -307,4 +363,6 @@ renderBtn.onclick = () => {
   text.style.fontWeight = "bold";
   text.textContent = "OUTPUT";
   svg.appendChild(text);
+
+  renderBtn.blur();
 };
