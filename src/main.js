@@ -10,6 +10,7 @@ function createWindow() {
       contextIsolation: false,
     },
   });
+  win.setMenu(null);
   win.loadFile(path.join(__dirname, "renderer/index.html"));
 }
 
